@@ -26,6 +26,8 @@
 ```
 TEST_LOGIN=your_login
 TEST_PASSWORD=your_password
+TEST_LOGIN_SECOND=your_second_login
+TEST_PASSWORD_SECOND=your_second_password
 ```
 
 8. Для запуска всех тестов достаточно выполнить команду в корне проекта:

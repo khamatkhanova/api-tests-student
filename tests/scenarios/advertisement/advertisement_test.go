@@ -21,7 +21,7 @@ const (
 	testAdvertisementDescription = "Test advertisement description"
 	testAdvertisementPrice       = 123.45
 	testAdvertisementQuantity    = 7
-	testAdvertisementPhoto       = "../../testdata/test.jpg"
+	testAdvertisementPhoto       = "../testdata/test.jpg"
 )
 
 type TestSuite struct {
@@ -127,24 +127,39 @@ func (s *TestSuite) TestCreateAdvertisementUnauthorized() {
 
 // TestCreateAdvertisementNegative проверяет создание объявления с некорректными параметрами
 func (s *TestSuite) TestCreateAdvertisementNegative() {
+	photoPath := filepath.Clean(testAdvertisementPhoto)
+	invalidPhotoPath := filepath.Clean("../testdata/invalid.txt")
+
 	testCases := []struct {
-		name        string
-		title       string
-		description string
-		price       float64
+		name            string
+		title           string
+		description     string
+		price           string
+		quantity        string
+		photos          []string
+		expectedError   string
+		expectedMessage string
 	}{
-		{name: "Пустое название", title: "", description: testAdvertisementDescription, price: testAdvertisementPrice},
-		{name: "Отрицательная цена", title: "Negative price test", description: testAdvertisementDescription, price: -100},
-		{name: "Слишком длинное название", title: strings.Repeat("A", 256), description: testAdvertisementDescription, price: testAdvertisementPrice},
-		{name: "Пустое описание", title: "Empty description test", description: "", price: testAdvertisementPrice},
+		{name: "Пустое название", title: "", description: testAdvertisementDescription, price: "123.45", quantity: "7", photos: []string{photoPath}, expectedError: "invalid_request", expectedMessage: "title is required"},
+		{name: "Отрицательная цена", title: "Negative price", description: testAdvertisementDescription, price: "-100", quantity: "7", photos: []string{photoPath}, expectedError: "invalid_request", expectedMessage: "price must be between 0 and 1000000 inclusive"},
+		{name: "Слишком длинное название", title: strings.Repeat("A", 256), description: testAdvertisementDescription, price: "123.45", quantity: "7", photos: []string{photoPath}, expectedError: "invalid_request", expectedMessage: "title must not exceed 50 characters provided 256"},
+		{name: "Пустое описание", title: "Empty description", description: "", price: "123.45", quantity: "7", photos: []string{photoPath}, expectedError: "invalid_request", expectedMessage: "description is required"},
+		{name: "Отрицательное количество", title: "Negative quantity", description: testAdvertisementDescription, price: "123.45", quantity: "-1", photos: []string{photoPath}, expectedError: "invalid_request", expectedMessage: "quantity must be between 1 and 100 inclusive"},
+		{name: "Строковая цена", title: "String price", description: testAdvertisementDescription, price: "abc", quantity: "7", photos: []string{photoPath}, expectedError: "invalid_request", expectedMessage: "cannot convert string value abc to float"},
+		{name: "Строковое количество", title: "String quantity", description: testAdvertisementDescription, price: "123.45", quantity: "abc", photos: []string{photoPath}, expectedError: "invalid_request", expectedMessage: "cannot convert string value to int"},
+		{name: "Неподдерживаемый формат фотографии", title: "Invalid photo", description: testAdvertisementDescription, price: "123.45", quantity: "7", photos: []string{invalidPhotoPath}, expectedError: "invalid_request", expectedMessage: `photo 1: file type not allowed: extension ".txt"`},
+		{name: "Более трех фотографий", title: "Too many photos", description: testAdvertisementDescription, price: "123.45", quantity: "7", photos: []string{photoPath, photoPath, photoPath, photoPath}, expectedError: "invalid_request", expectedMessage: "maximum 3 photos allowed"},
 	}
 
 	for _, testCase := range testCases {
 		s.Run(testCase.name, func() {
 			t := s.T()
 			base.Precondition("Проверка: " + testCase.name)
-			body := advertisementManager.CreateAdvertisementWithStatus(t, s.loginData.Token, testCase.title, testCase.description, testCase.price, testAdvertisementQuantity, filepath.Clean(testAdvertisementPhoto), 400)
-			require.NotEmpty(t, body, "Ответ API не должен быть пустым")
+
+			body := advertisementManager.CreateAdvertisementWithParams(t, s.loginData.Token, testCase.title, testCase.description, testCase.price, testCase.quantity, testCase.photos, 400)
+
+			require.Equal(t, testCase.expectedError, gjson.Get(body, "error").String(), "Некорректное значение error")
+			require.Equal(t, testCase.expectedMessage, gjson.Get(body, "message").String(), "Некорректное сообщение об ошибке")
 		})
 	}
 }

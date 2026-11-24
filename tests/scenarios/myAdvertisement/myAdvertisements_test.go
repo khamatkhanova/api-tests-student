@@ -3,15 +3,18 @@ package myAdvertisement
 import (
 	"net/http"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/tidwall/gjson"
 
+	"api-tests-template/internal/managers/advertisement"
 	"api-tests-template/internal/managers/auth"
 	"api-tests-template/internal/managers/auth/models"
 	"api-tests-template/internal/managers/myAdvertisements"
+	"api-tests-template/internal/utils"
 
 	base "api-tests-template/tests"
 )
@@ -38,29 +41,43 @@ func (s *TestSuite) TearDownSuite() {
 
 // Positive: Проверяем получение собственных объявлений в профиле
 func (s *TestSuite) TestGetMyAdvertisementsPositive() {
-	var advertisementsBody string
-	s.Run("Получаем список собственных объявлений", func() {
-		advertisementsBody = myAdvertisements.GetMyAdvertisements(s.T(), s.loginData.Token, http.StatusOK, 50)
+	t := s.T()
+	title := "My advertisement test " + utils.RandomString(10)
+
+	createBody := advertisement.CreateAdvertisement(t, s.loginData.Token, title, "My advertisement test description", 123.45, 7, filepath.Clean("../testdata/test.jpg"))
+
+	adID := gjson.Get(createBody, "id").String()
+	require.NotEmpty(t, adID, "ID созданного объявления не должен быть пустым")
+
+	t.Cleanup(func() {
+		advertisement.DeleteAdvertisement(t, s.loginData.Token, adID)
 	})
 
-	var items gjson.Result
-	s.Run("Проверяем, что у нас есть несколько добавленных ранее объявлений", func() {
-		items = gjson.Get(advertisementsBody, "items")
-		require.NotEmpty(s.T(), items.Array())
-	})
+	base.Precondition("Получение списка собственных объявлений")
+	advertisementsBody := myAdvertisements.GetMyAdvertisements(t, s.loginData.Token, http.StatusOK, 50)
+	items := gjson.Get(advertisementsBody, "items").Array()
 
-	s.Run("Проверяем, что наши объявления имеют принадлежность к нашему пользователю и объявления имеют НЕ пустые параметры", func() {
-		for _, item := range items.Array() {
-			require.Equal(s.T(), s.loginData.User.Id, gjson.Get(item.String(), "user_id").String(), "user_id не совпадает")
+	var createdAdvertisement gjson.Result
+	found := false
 
-			require.NotEmpty(s.T(), gjson.Get(item.String(), "id").String(), "id пустое")
-			require.NotEmpty(s.T(), gjson.Get(item.String(), "created_at").String(), "created_at пустое")
-			require.NotEmpty(s.T(), gjson.Get(item.String(), "updated_at").String(), "updated_at пустое")
-			require.NotEmpty(s.T(), gjson.Get(item.String(), "title").String(), "Название пустое")
-			require.NotEmpty(s.T(), gjson.Get(item.String(), "description").String(), "Описание пустое")
-			require.True(s.T(), len(gjson.Get(item.String(), "photos").Array()) > 0, "Присутствуют пустые фотографии")
+	for _, item := range items {
+		if item.Get("id").String() == adID {
+			createdAdvertisement = item
+			found = true
+			break
 		}
-	})
+	}
+
+	require.True(t, found, "Созданное объявление отсутствует в списке собственных объявлений")
+
+	item := createdAdvertisement.String()
+	require.Equal(t, s.loginData.User.Id, gjson.Get(item, "user_id").String(), "user_id не совпадает")
+	require.NotEmpty(t, gjson.Get(item, "id").String(), "id пустое")
+	require.NotEmpty(t, gjson.Get(item, "created_at").String(), "created_at пустое")
+	require.NotEmpty(t, gjson.Get(item, "updated_at").String(), "updated_at пустое")
+	require.Equal(t, title, gjson.Get(item, "title").String(), "Название объявления не совпадает")
+	require.NotEmpty(t, gjson.Get(item, "description").String(), "Описание пустое")
+	require.NotEmpty(t, gjson.Get(item, "photos").Array(), "У объявления отсутствуют фотографии")
 }
 
 // Negative: Проверяем 401 ошибку при попытке получить собственные объявления без токена

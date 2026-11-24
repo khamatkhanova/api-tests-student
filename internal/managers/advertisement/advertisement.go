@@ -38,3 +38,18 @@ func CreateAdvertisementWithStatus(t *testing.T, token string, title string, des
 
 	return string(responseBody)
 }
+
+// CreateAdvertisementWithParams отправляет объявление с произвольными параметрами и проверяет ожидаемый статус
+func CreateAdvertisementWithParams(t *testing.T, token, title, description, price, quantity string, photoPaths []string, expectedStatus int) string {
+	t.Helper()
+
+	response, err := httpAdvertisement.HttpPostAdvertisementWithParams(token, title, description, price, quantity, photoPaths)
+	require.NoError(t, err, "Не удалось отправить запрос на создание объявления")
+	defer response.Body.Close()
+
+	responseBody, err := io.ReadAll(response.Body)
+	require.NoError(t, err, "Не удалось прочитать ответ сервера")
+	require.Equal(t, expectedStatus, response.StatusCode, "Некорректный HTTP-статус при создании объявления: "+string(responseBody))
+
+	return string(responseBody)
+}

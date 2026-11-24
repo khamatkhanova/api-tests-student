@@ -67,3 +67,13 @@ func DeleteFavoriteWithStatus(t *testing.T, token, advertisementID string, expec
 
 	return readResponseBody(t, response, expectedStatus)
 }
+
+// GetFavoritesWithStatus получает список избранного и проверяет ожидаемый статус
+func GetFavoritesWithStatus(t *testing.T, token string, expectedStatus int) string {
+	t.Helper()
+
+	response, err := httpFavorites.HttpGetFavorites(token)
+	require.NoError(t, err, "Не удалось получить список избранного")
+
+	return readResponseBody(t, response, expectedStatus)
+}

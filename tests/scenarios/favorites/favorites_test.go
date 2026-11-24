@@ -22,7 +22,7 @@ const (
 	favoriteDescription = "Favorite test description"
 	favoritePrice       = 150.50
 	favoriteQuantity    = 3
-	favoritePhoto       = "../../testdata/test.jpg"
+	favoritePhoto       = "../testdata/test.jpg"
 )
 
 type TestSuite struct {
@@ -91,12 +91,20 @@ func (s *TestSuite) TestFavoriteCycle() {
 func (s *TestSuite) TestFavoriteRemovedWithAdvertisement() {
 	t := s.T()
 	adID := s.createTestAdvertisement(t, s.loginData.Token)
+	advertisementDeleted := false
+
+	t.Cleanup(func() {
+		if !advertisementDeleted {
+			advertisementManager.DeleteAdvertisement(t, s.loginData.Token, adID)
+		}
+	})
 
 	base.Precondition("Добавление чужого объявления в избранное")
 	favoritesManager.AddFavorite(t, s.ownerData.Token, adID)
 
 	base.Precondition("Удаление объявления владельцем")
 	advertisementManager.DeleteAdvertisement(t, s.loginData.Token, adID)
+	advertisementDeleted = true
 
 	base.Precondition("Проверка удаления объявления из избранного")
 	body := favoritesManager.GetFavorites(t, s.ownerData.Token)
@@ -154,7 +162,9 @@ func (s *TestSuite) TestAddNonexistentAdvertisementToFavorites() {
 	t := s.T()
 	base.Precondition("Попытка добавить несуществующее объявление в избранное")
 	body := favoritesManager.AddFavoriteWithStatus(t, s.ownerData.Token, "00000000-0000-0000-0000-000000000000", http.StatusBadRequest)
-	require.NotEmpty(t, body, "Ответ API не должен быть пустым")
+
+	require.Equal(t, "invalid_request", gjson.Get(body, "error").String())
+	require.Equal(t, "Key: 'AddFavoriteRequest.AdvertisementID' Error:Field validation for 'AdvertisementID' failed on the 'required' tag", gjson.Get(body, "message").String())
 }
 
 // TestDeleteNonexistentFavorite проверяет удаление несуществующего объявления из избранного
@@ -162,7 +172,9 @@ func (s *TestSuite) TestDeleteNonexistentFavorite() {
 	t := s.T()
 	base.Precondition("Попытка удалить несуществующее объявление из избранного")
 	body := favoritesManager.DeleteFavoriteWithStatus(t, s.ownerData.Token, "00000000-0000-0000-0000-000000000000", http.StatusNotFound)
-	require.NotEmpty(t, body, "Ответ API не должен быть пустым")
+
+	require.Equal(t, "not_found", gjson.Get(body, "error").String())
+	require.Equal(t, "Favorite entry not found", gjson.Get(body, "message").String())
 }
 
 // TestDeleteFavoriteWithoutAuthorization проверяет запрет удаления из избранного без авторизации
@@ -179,4 +191,13 @@ func (s *TestSuite) TestDeleteFavoriteWithoutAuthorization() {
 	base.Precondition("Попытка удалить объявление из избранного без авторизации")
 	body := favoritesManager.DeleteFavoriteWithStatus(t, "", adID, http.StatusUnauthorized)
 	require.NotEmpty(t, body, "Ответ API не должен быть пустым")
+}
+
+// TestGetFavoritesWithoutAuthorization проверяет запрет получения избранного без авторизации
+func (s *TestSuite) TestGetFavoritesWithoutAuthorization() {
+	t := s.T()
+	base.Precondition("Получение списка избранного без авторизации")
+	body := favoritesManager.GetFavoritesWithStatus(t, "", http.StatusUnauthorized)
+
+	require.Equal(t, "unauthorized", gjson.Get(body, "error").String())
 }
